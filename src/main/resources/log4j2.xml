@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="DEBUG">
+	<Appenders>
+	    <Console name="console" target="SYSTEM_OUT">
+            <PatternLayout pattern="[%highlight{%-5level}] %d{DEFAULT} %c{1}.%M() - %msg%n%throwable{short.lineNumber}" />
+        </Console>
+		<RollingFile name="shakeit-file"
+			fileName="./shakeit.log" filePattern="./shakeit-%i.log"
+			append="false">
+			<Policies>
+				<SizeBasedTriggeringPolicy size="5 MB" />
+			</Policies>
+			<DefaultRolloverStrategy max="100" />
+			<PatternLayout charset="UTF-8"
+				pattern="[%d{dd/MM/yy hh:mm:ss:sss z}] %5p %c{2}:%L - %m%n" />
+		</RollingFile>
+	</Appenders>
+	<Loggers>
+		<Logger name="org" level="info">
+			<AppenderRef ref="console" />
+			<AppenderRef ref="shakeit-file" />
+		</Logger>		
+	</Loggers>
+</Configuration>
