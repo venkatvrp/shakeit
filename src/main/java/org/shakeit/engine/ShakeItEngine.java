@@ -9,7 +9,9 @@ import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.ResourceBundle;
 
 import javax.net.ssl.SSLHandshakeException;
@@ -35,9 +37,14 @@ public class ShakeItEngine {
 	static final Logger skitlogger = LogManager.getLogger(ShakeItEngine.class);
 	static final String MSIW = "msiw";
 	static final String NSPORTAL = "nsportal";
+	static Map<String,Integer> statMap = null;
 
 	public static void main(String[] args) {
 		ShakeItEngine shakeItEng = new ShakeItEngine();
+		statMap = new HashMap<>();
+		statMap.put("total",0);
+		statMap.put("pass",0);
+		statMap.put("fail",0);
 		if (args != null && args[0].length() > 0) {
 			String envIp = args[0];
 			String appName = args[1];
@@ -58,7 +65,23 @@ public class ShakeItEngine {
 		} else {
 			skitlogger.error("Please specify the target environment/argument empty");
 		}
+		
+		int successRate = statMap.get("pass") * 100 /statMap.get("total");
+		
 		skitlogger.info("Shakedown Completed !!");
+		skitlogger.info("+++++++++++++++++++++++++++++++++++++++++++++++++");
+		skitlogger.info("Total number of hits 			 	:: "+statMap.get("total"));
+		skitlogger.info("Number of Successful hits 			:: "+statMap.get("pass"));
+		skitlogger.info("Number of Failure hits		    	:: "+statMap.get("fail"));
+		skitlogger.info("Success Rate				    	:: "+successRate+"%");
+		
+		if(successRate>90) {
+			skitlogger.info("Shakedown Status :: SUCCESS");
+		}else {
+			skitlogger.info("Shakedown Status :: FAILURE");
+		}
+		skitlogger.info("+++++++++++++++++++++++++++++++++++++++++++++++++");
+		
 	}
 
 	/**
@@ -180,6 +203,7 @@ public class ShakeItEngine {
 		if(url!=null && !url.isEmpty()) {	
 			try {
 				responseCode = getURLResponseCode(url);
+				updateStatistics(0);
 			}catch(SSLHandshakeException se) {
 				skitlogger.warn("SSLHandshake warning");
 				responseCode = 200;
@@ -189,14 +213,28 @@ public class ShakeItEngine {
 			}catch(SocketTimeoutException se) {
 				skitlogger.error("Socket Timeout error");
 				responseCode = 500;
+			}catch(Exception e) {
+				skitlogger.error(e.getMessage());
+				responseCode = 500;
 			}
 			if(responseCode!=200) {
 				skitlogger.info("ERROR :: "+responseCode + " URL:: " +url);
+				updateStatistics(-1);
 			}else {
 				skitlogger.info("OK :: " +url);
+				updateStatistics(200);
 			}
 		}			
 		return status;
+	}
+	
+	
+	private static void updateStatistics(int status) {
+		if(statMap!=null) {			
+			if(status==0)statMap.put("total", statMap.get("total")+1);
+			if(status==200)statMap.put("pass", statMap.get("pass")+1);
+			if(status==-1)statMap.put("fail", statMap.get("fail")+1);	
+		}		
 	}
 	
 	
