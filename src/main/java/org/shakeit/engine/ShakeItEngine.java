@@ -37,18 +37,16 @@ public class ShakeItEngine {
 	static final Logger skitlogger = LogManager.getLogger(ShakeItEngine.class);
 	static final String MSIW = "msiw";
 	static final String NSPORTAL = "nsportal";
-	static Map<String,Integer> statMap = null;
+	static Map<String,Object> levelMap = null;
 
 	public static void main(String[] args) {
 		ShakeItEngine shakeItEng = new ShakeItEngine();
-		statMap = new HashMap<>();
-		statMap.put("total",0);
-		statMap.put("pass",0);
-		statMap.put("fail",0);
+		levelMap = new HashMap<>();
+		
 		if (args != null && args[0].length() > 0) {
 			String envIp = args[0];
 			String appName = args[1];
-			String xmlUrlStr = "file:///"+System.getProperty("user.dir")+"/"+resourceBundle.getString("shakedown.xml.path");
+			String xmlUrlStr = "file:///"+System.getProperty("user.dir")+"/config/"+resourceBundle.getString("shakedown.xml.path");
 			skitlogger.info("Validating XML..");
 			Document doc = shakeItEng.validateXML(xmlUrlStr);
 			if (doc != null) {
@@ -64,24 +62,9 @@ public class ShakeItEngine {
 			}
 		} else {
 			skitlogger.error("Please specify the target environment/argument empty");
-		}
-		
-		int successRate = statMap.get("pass") * 100 /statMap.get("total");
-		
+		}	
 		skitlogger.info("Shakedown Completed !!");
-		skitlogger.info("+++++++++++++++++++++++++++++++++++++++++++++++++");
-		skitlogger.info("Total number of hits 			 	:: "+statMap.get("total"));
-		skitlogger.info("Number of Successful hits 			:: "+statMap.get("pass"));
-		skitlogger.info("Number of Failure hits		    	:: "+statMap.get("fail"));
-		skitlogger.info("Success Rate				    	:: "+successRate+"%");
-		
-		if(successRate>90) {
-			skitlogger.info("Shakedown Status :: SUCCESS");
-		}else {
-			skitlogger.info("Shakedown Status :: FAILURE");
-		}
-		skitlogger.info("+++++++++++++++++++++++++++++++++++++++++++++++++");
-		
+		shakeItEng.printStatistics();		
 	}
 
 	/**
@@ -130,7 +113,7 @@ public class ShakeItEngine {
 	 * @return boolean
 	 */
 	private boolean extractValuesfromXML(String envIp,String appName) {
-		File file = new File(System.getProperty("user.dir")+"/"+resourceBundle.getString("shakedown.xml.path"));
+		File file = new File(System.getProperty("user.dir")+"/config/"+resourceBundle.getString("shakedown.xml.path"));
 		skitlogger.info("Shakedown being performed on "+envIp.toUpperCase()+ " environment");
 		JAXBContext jaxbContext = null;
 		try {
@@ -163,6 +146,7 @@ public class ShakeItEngine {
 			skitlogger.error("Error while unmarshalling "+e.getMessage());
 		}catch(Exception e) {
 			skitlogger.error("Error occurred "+e.getMessage());
+			e.printStackTrace();
 		}
 		
 		return true;
@@ -174,13 +158,13 @@ public class ShakeItEngine {
 	 * @param server
 	 * @throws IOException
 	 */
-	private void accessServer(List<Url> urlList,Server server,String appName) throws IOException {
+	private void accessServer(List<Url> urlList,Server server,String appName) throws IOException {		
 		for(Url appUrl:urlList) {
 			if(appUrl.getApplication().equalsIgnoreCase(appName)) {
 				for(Url serverUrl:server.getUrl()) {				
 					if(serverUrl.getType().equalsIgnoreCase(appUrl.getType())) {
 						try {
-							connectToURL(serverUrl.getValue()+appUrl.getValue());
+							connectToURL(serverUrl.getValue()+appUrl.getValue(),appUrl.getLevel());
 						}catch(SSLHandshakeException se) {
 							skitlogger.warn("SSLHandshake warning");
 						}
@@ -197,13 +181,13 @@ public class ShakeItEngine {
 	 * @return CountStat
 	 * @throws IOException
 	 */
-	private static int connectToURL(String url) throws IOException{
+	private static int connectToURL(String url,String level) throws IOException{
 		int status = 0;	
 		int responseCode = 0;
 		if(url!=null && !url.isEmpty()) {	
 			try {
-				responseCode = getURLResponseCode(url);
-				updateStatistics(0);
+				updateStatistics(0,level);
+				responseCode = getURLResponseCode(url);				
 			}catch(SSLHandshakeException se) {
 				skitlogger.warn("SSLHandshake warning");
 				responseCode = 200;
@@ -219,21 +203,52 @@ public class ShakeItEngine {
 			}
 			if(responseCode!=200) {
 				skitlogger.info("ERROR :: "+responseCode + " URL:: " +url);
-				updateStatistics(-1);
+				updateStatistics(-1,level);
 			}else {
 				skitlogger.info("OK :: " +url);
-				updateStatistics(200);
+				updateStatistics(200,level);
 			}
 		}			
 		return status;
 	}
 	
 	
-	private static void updateStatistics(int status) {
-		if(statMap!=null) {			
-			if(status==0)statMap.put("total", statMap.get("total")+1);
-			if(status==200)statMap.put("pass", statMap.get("pass")+1);
-			if(status==-1)statMap.put("fail", statMap.get("fail")+1);	
+	private static void updateStatistics(int status,String level) {	
+		
+		@SuppressWarnings("unchecked")
+		Map<String,Integer> statMap = (Map)levelMap.get(level);
+		if(statMap==null) {
+			statMap = new HashMap<>();			
+			statMap.put("total",0);
+			statMap.put("pass",0);
+			statMap.put("fail",0);
+		}		
+	
+		if(status==0)statMap.put("total", statMap.get("total")+1);
+		if(status==200)statMap.put("pass", statMap.get("pass")+1);
+		if(status==-1)statMap.put("fail", statMap.get("fail")+1);	
+			
+	
+		levelMap.put(level,statMap);
+	}
+	
+	private void printStatistics() {	
+		if(levelMap!=null) {
+			levelMap.forEach((k,v)->{
+				Map<String,Integer> statMap = (Map<String, Integer>) v;
+				int successRate = statMap.get("pass") * 100 /statMap.get("total");
+				skitlogger.info("+++++++++++++++++++++++ LEVEL "+k+" URLs ++++++++++++++++++++++++++");
+				skitlogger.info("Total number of hits 			 	:: "+statMap.get("total"));
+				skitlogger.info("Number of Successful hits 			:: "+statMap.get("pass"));
+				skitlogger.info("Number of Failure hits		    	:: "+statMap.get("fail"));
+				skitlogger.info("Success Rate				    	:: "+successRate+"%");
+				if(successRate>=Integer.parseInt(resourceBundle.getString("url.level."+k+".criteria"))) {
+					skitlogger.info("Shakedown Status :: SUCCESS");
+				}else {
+					skitlogger.info("Shakedown Status :: FAILURE");
+				}
+				skitlogger.info("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
+			});
 		}		
 	}
 	

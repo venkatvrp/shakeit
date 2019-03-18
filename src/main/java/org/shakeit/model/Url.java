@@ -6,7 +6,7 @@ import javax.xml.bind.annotation.XmlAttribute;
 
 public class Url
 {
-    private String id;
+    private String level;
 
     private String type;
 
@@ -14,18 +14,18 @@ public class Url
     
     private String application;
 
-    public String getId ()
-    {
-        return id;
-    }
+   
+
+    public String getLevel() {
+		return level;
+	}
 
     @XmlAttribute
-    public void setId (String id)
-    {
-        this.id = id;
-    }
+	public void setLevel(String level) {
+		this.level = level;
+	}
 
-    public String getType ()
+	public String getType ()
     {
         return type;
     }
@@ -61,6 +61,6 @@ public class Url
     @Override
     public String toString()
     {
-        return "ClassPojo [id = "+id+", type = "+type+", value = "+value+"]";
+        return "ClassPojo [level = "+level+", type = "+type+", value = "+value+"]";
     }
 }
