@@ -1,0 +1,1 @@
+java -jar shakeit-1.0.jar dev msiw
