@@ -37,6 +37,9 @@ public class ShakeItEngine {
 	static final Logger skitlogger = LogManager.getLogger(ShakeItEngine.class);
 	static final String MSIW = "msiw";
 	static final String NSPORTAL = "nsportal";
+	static final String TOTAL = "total";
+	static final String PASS = "pass";
+	static final String FAIL = "fail";
 	static Map<String,Object> levelMap = null;
 
 	public static void main(String[] args) {
@@ -60,7 +63,7 @@ public class ShakeItEngine {
 			} else {
 				skitlogger.error("XML validation failed. Please check the xml.");
 			}
-		} else {
+		}else {
 			skitlogger.error("Please specify the target environment/argument empty");
 		}	
 		skitlogger.info("Shakedown Completed !!");
@@ -146,7 +149,6 @@ public class ShakeItEngine {
 			skitlogger.error("Error while unmarshalling "+e.getMessage());
 		}catch(Exception e) {
 			skitlogger.error("Error occurred "+e.getMessage());
-			e.printStackTrace();
 		}
 		
 		return true;
@@ -212,35 +214,42 @@ public class ShakeItEngine {
 		return status;
 	}
 	
-	
+	/**
+	 * Updates the statistics objects  with status
+	 * @param status
+	 * @param level
+	 */
+	@SuppressWarnings("unchecked")
 	private static void updateStatistics(int status,String level) {	
-		
-		@SuppressWarnings("unchecked")
-		Map<String,Integer> statMap = (Map)levelMap.get(level);
+		Map<String,Integer> statMap = (Map<String, Integer>)levelMap.get(level);
 		if(statMap==null) {
 			statMap = new HashMap<>();			
-			statMap.put("total",0);
-			statMap.put("pass",0);
-			statMap.put("fail",0);
+			statMap.put(TOTAL,0);
+			statMap.put(PASS,0);
+			statMap.put(FAIL,0);
 		}		
 	
-		if(status==0)statMap.put("total", statMap.get("total")+1);
-		if(status==200)statMap.put("pass", statMap.get("pass")+1);
-		if(status==-1)statMap.put("fail", statMap.get("fail")+1);	
+		if(status==0)statMap.put(TOTAL, statMap.get(TOTAL)+1);
+		if(status==200)statMap.put(PASS, statMap.get(PASS)+1);
+		if(status==-1)statMap.put(FAIL, statMap.get(FAIL)+1);	
 			
 	
 		levelMap.put(level,statMap);
 	}
 	
+	/**
+	 * Prints/Logs the statistics
+	 */
+	@SuppressWarnings("unchecked")
 	private void printStatistics() {	
 		if(levelMap!=null) {
 			levelMap.forEach((k,v)->{
 				Map<String,Integer> statMap = (Map<String, Integer>) v;
-				int successRate = statMap.get("pass") * 100 /statMap.get("total");
+				int successRate = statMap.get(PASS) * 100 /statMap.get(TOTAL);
 				skitlogger.info("+++++++++++++++++++++++ LEVEL "+k+" URLs ++++++++++++++++++++++++++");
-				skitlogger.info("Total number of hits 			 	:: "+statMap.get("total"));
-				skitlogger.info("Number of Successful hits 			:: "+statMap.get("pass"));
-				skitlogger.info("Number of Failure hits		    	:: "+statMap.get("fail"));
+				skitlogger.info("Total number of hits 			 	:: "+statMap.get(TOTAL));
+				skitlogger.info("Number of Successful hits 			:: "+statMap.get(PASS));
+				skitlogger.info("Number of Failure hits		    	:: "+statMap.get(FAIL));
 				skitlogger.info("Success Rate				    	:: "+successRate+"%");
 				if(successRate>=Integer.parseInt(resourceBundle.getString("url.level."+k+".criteria"))) {
 					skitlogger.info("Shakedown Status :: SUCCESS");
