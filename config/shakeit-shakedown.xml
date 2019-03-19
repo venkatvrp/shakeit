@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shakeit>
+	<servers>
+		<server id="server1" env="dev" application="app1">
+			<url id="1" type="wps" value="http://en.wikipedia.org"></url>
+			<url id="2" type="dmgr" value="https://en.wikipedia.org"></url>
+		</server>
+		<server id="server2" env="stg" application="app2">
+			<url id="1" type="wps" value="http://en.wikipedia.org" />
+			<url id="2" type="dmgr" value="https://en.wikipedia.org" />
+		</server>		
+		<server id="server3" env="prod" application="app3">
+			<url id="1" type="wps" value="http://en.wikipedia.org" />
+			<url id="2" type="dmgr" value="https://en.wikipedia.org" />
+		</server>
+	</servers>
+	<applications>
+		<url level="1" type="wps" application="app1"
+			value="/wps/portal/Administration" />
+		<url level="2" type="wps" application="app2"
+			value="/wiki/2017_Men%27s_EuroHockey_Indoor_Club_Cup" />
+		<url level="1" type="dmgr" application="app1"
+			value="/ibm/console/logon.jsp" />		
+		<url level="2" type="wps" application="app2"
+			value="/wiki/Wikipedia:About" />
+	</applications>
+</shakeit>

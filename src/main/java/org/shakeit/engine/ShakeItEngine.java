@@ -9,10 +9,13 @@ import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.ResourceBundle;
+import java.util.Set;
 
 import javax.net.ssl.SSLHandshakeException;
 import javax.xml.bind.JAXBContext;
@@ -24,6 +27,7 @@ import javax.xml.parsers.ParserConfigurationException;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jsoup.Jsoup;
 import org.shakeit.model.Server;
 import org.shakeit.model.Shakeit;
 import org.shakeit.model.Url;
@@ -35,16 +39,33 @@ public class ShakeItEngine {
 
 	static final ResourceBundle resourceBundle = ResourceBundle.getBundle("shakeit");	
 	static final Logger skitlogger = LogManager.getLogger(ShakeItEngine.class);
-	static final String MSIW = "msiw";
-	static final String NSPORTAL = "nsportal";
 	static final String TOTAL = "total";
 	static final String PASS = "pass";
 	static final String FAIL = "fail";
+	static final String ALL = "_all";
+	static final String CURRENT = "_current";
+
 	static Map<String,Object> levelMap = null;
+	static Map<String,Integer> progressMap = null;
+	static Set<String> hostSet = null;
+	static Map<String,Set<String>> errSetMap = null; 
+	static Map<String,List<Url>> appListMap = null;
+	static Set<String> errUrlSet = null;
+	
+	int progressInt = 0;
 
 	public static void main(String[] args) {
 		ShakeItEngine shakeItEng = new ShakeItEngine();
 		levelMap = new HashMap<>();
+		progressMap = new HashMap<>(); 
+		hostSet = new HashSet<>();
+		errSetMap = new HashMap<>(); 
+		appListMap = new HashMap<>();
+		errUrlSet = new HashSet<>();
+		
+		// To create objects for the configured error and applications
+		getResourceBundleValues("error.").forEach((rsrcKey,rsrcVal)->errSetMap.put(rsrcKey,new HashSet<>()));
+		getResourceBundleValues("app.").forEach((rsrcKey,rsrcVal)->appListMap.put(rsrcVal,new ArrayList<Url>()));
 		
 		if (args != null && args[0].length() > 0) {
 			String envIp = args[0];
@@ -78,14 +99,26 @@ public class ShakeItEngine {
 	 */
 	private static int getURLResponseCode(String url) throws IOException {
 		if (url != null && !url.isEmpty()) {
-			URL obj = new URL(url);
-			HttpURLConnection con = (HttpURLConnection) obj.openConnection();
+			URL urlObj = new URL(url);
+			hostSet.add(urlObj.getHost());
+			
+			org.jsoup.nodes.Document doc = Jsoup.connect(url).get();
+			
+			// Parses the DOM for the specified error and updates the object with URL
+			errSetMap.forEach((resrcKey,setObj)->{
+				if(!doc.getElementsContainingText(resourceBundle.getString(resrcKey)).isEmpty()) {
+					setObj.add(url);
+				}
+			});						
+		 
+			HttpURLConnection con = (HttpURLConnection) urlObj.openConnection();
 			con.setRequestMethod("GET");
 			con.setConnectTimeout(6000);
 			return con.getResponseCode();
 		} else {
 			return 404;
 		}
+		
 	}
 
 	/**
@@ -119,32 +152,45 @@ public class ShakeItEngine {
 		File file = new File(System.getProperty("user.dir")+"/config/"+resourceBundle.getString("shakedown.xml.path"));
 		skitlogger.info("Shakedown being performed on "+envIp.toUpperCase()+ " environment");
 		JAXBContext jaxbContext = null;
+		Map<String,Integer> countMap = new HashMap<>();
+		
+		// Initializes counter and progress objects
+		appListMap.forEach((aName,count)->{
+			countMap.put(aName,0);
+			progressMap.put(aName+CURRENT,0);
+		});
+		
+		
 		try {
 			jaxbContext = JAXBContext.newInstance(Shakeit.class);
 			Unmarshaller unmarshaller;
 			unmarshaller = jaxbContext.createUnmarshaller();
 			Shakeit shakeit = (Shakeit) unmarshaller.unmarshal(file);
 			
-			List<Url> nspUrlList = new ArrayList<>();
-			List<Url> msiwUrlList = new ArrayList<>();
+			// Stores URL specific to applications in the respective object in map
+			shakeit.getApplications().getUrl().forEach(url->appListMap.get(url.getApplication()).add(url));
 			
-			for(Url url:shakeit.getApplications().getUrl()) {
-				if(url.getApplication().equalsIgnoreCase(MSIW)) {
-					msiwUrlList.add(url);
-				}else if(url.getApplication().equalsIgnoreCase(NSPORTAL)) {
-					nspUrlList.add(url);
+			// Counts the number of Server for the specified application 
+			shakeit.getServers().getServer().forEach(server->{
+				if(server.getEnv().equalsIgnoreCase(envIp)) {					
+					countMap.put(server.getApplication(), countMap.get(server.getApplication())+1);										
 				}
-			}
+			});	
+			
+			// Multiply the URLs with number of server to get exact total URLs
+			countMap.forEach((aName,count)->progressMap.put(aName+ALL, appListMap.get(aName).size()*count));		
 
-			for(Server server:shakeit.getServers().getServer()) {
+			// Access server specific to the environment
+			shakeit.getServers().getServer().forEach(server->{
 				if(server.getEnv().equalsIgnoreCase(envIp)) {
-					if(server.getApplication().equalsIgnoreCase(NSPORTAL)) {
-						accessServer(nspUrlList, server,appName);	
-					}else if(server.getApplication().equalsIgnoreCase(MSIW)) {
-						accessServer(msiwUrlList, server,appName);	
+					try {
+						accessServer(appListMap.get(server.getApplication()), server,appName);
+					} catch (IOException e) {
+						skitlogger.error("IO Exception occurred" +e.getMessage());
 					}					
 				}
-			}
+			});				
+			
 		} catch (JAXBException e) {
 			skitlogger.error("Error while unmarshalling "+e.getMessage());
 		}catch(Exception e) {
@@ -160,18 +206,25 @@ public class ShakeItEngine {
 	 * @param server
 	 * @throws IOException
 	 */
-	private void accessServer(List<Url> urlList,Server server,String appName) throws IOException {		
-		for(Url appUrl:urlList) {
+	private void accessServer(List<Url> urlList,Server server,String appName) throws IOException {
+		
+		for(Url appUrl:urlList){
 			if(appUrl.getApplication().equalsIgnoreCase(appName)) {
+				// To calculate and display progress
+				showProgress(appName);
 				for(Url serverUrl:server.getUrl()) {				
 					if(serverUrl.getType().equalsIgnoreCase(appUrl.getType())) {
 						try {
-							connectToURL(serverUrl.getValue()+appUrl.getValue(),appUrl.getLevel());
+							// Updates the current URL hit count in the Map
+							progressMap.put(appName+CURRENT, progressInt++);
+							connectToURL(serverUrl.getValue()+appUrl.getValue(),appUrl.getLevel());	
+							
 						}catch(SSLHandshakeException se) {
 							skitlogger.warn("SSLHandshake warning");
 						}
+						
 					}					
-				}					
+				}				
 			}
 		}
 	}
@@ -191,23 +244,24 @@ public class ShakeItEngine {
 				updateStatistics(0,level);
 				responseCode = getURLResponseCode(url);				
 			}catch(SSLHandshakeException se) {
-				skitlogger.warn("SSLHandshake warning");
+				skitlogger.debug("SSLHandshake warning");
 				responseCode = 200;
 			}catch(ConnectException ce) {
-				skitlogger.error("Connection error");
+				skitlogger.debug("Connection error");
 				responseCode = 500;
 			}catch(SocketTimeoutException se) {
-				skitlogger.error("Socket Timeout error");
+				skitlogger.debug("Socket Timeout error");
 				responseCode = 500;
 			}catch(Exception e) {
-				skitlogger.error(e.getMessage());
-				responseCode = 500;
+				skitlogger.debug(e.getMessage());
+				responseCode = 500;				
 			}
 			if(responseCode!=200) {
-				skitlogger.info("ERROR :: "+responseCode + " URL:: " +url);
+				skitlogger.debug("ERROR :: "+responseCode + " URL:: " +url);
 				updateStatistics(-1,level);
+				errUrlSet.add(url);
 			}else {
-				skitlogger.info("OK :: " +url);
+				skitlogger.debug("OK :: " +url);				
 				updateStatistics(200,level);
 			}
 		}			
@@ -215,7 +269,7 @@ public class ShakeItEngine {
 	}
 	
 	/**
-	 * Updates the statistics objects  with status
+	 * Updates the statistics objects with different HTTP status
 	 * @param status
 	 * @param level
 	 */
@@ -241,25 +295,84 @@ public class ShakeItEngine {
 	 * Prints/Logs the statistics
 	 */
 	@SuppressWarnings("unchecked")
-	private void printStatistics() {	
-		if(levelMap!=null) {
+	private void printStatistics() {
+		
+		errSetMap.forEach((resrcKey,setObj)->{
+			if(setObj!=null && !setObj.isEmpty()) {			
+				skitlogger.info("+++++++++++++++++++++++ "+resrcKey.toUpperCase()+" URLS +++++++++++++++++++++++++++");
+				setObj.forEach(tmpDsbleErr->skitlogger.info(tmpDsbleErr));		
+			}
+		});	
+				
+		if(errUrlSet!=null && !errUrlSet.isEmpty()) {			
+			skitlogger.info("+++++++++++++++++++++++ HTTP ERROR URLs +++++++++++++++++++++++++++");
+			errUrlSet.forEach(urlErr->skitlogger.info(urlErr));		
+		}
+		if(hostSet!=null && !hostSet.isEmpty()) {			
+			skitlogger.info("+++++++++++++++++++++++ SERVERS SCANNED +++++++++++++++++++++++++++");
+			hostSet.forEach(hostname->skitlogger.info(hostname));		
+		}
+		if(levelMap!=null && !levelMap.isEmpty()) {
 			levelMap.forEach((k,v)->{
 				Map<String,Integer> statMap = (Map<String, Integer>) v;
 				int successRate = statMap.get(PASS) * 100 /statMap.get(TOTAL);
-				skitlogger.info("+++++++++++++++++++++++ LEVEL "+k+" URLs ++++++++++++++++++++++++++");
-				skitlogger.info("Total number of hits 			 	:: "+statMap.get(TOTAL));
-				skitlogger.info("Number of Successful hits 			:: "+statMap.get(PASS));
-				skitlogger.info("Number of Failure hits		    	:: "+statMap.get(FAIL));
-				skitlogger.info("Success Rate				    	:: "+successRate+"%");
-				if(successRate>=Integer.parseInt(resourceBundle.getString("url.level."+k+".criteria"))) {
+				skitlogger.info("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
+				skitlogger.info("Level:: "+k+" > Total:: "+statMap.get(TOTAL) +" > Hits:: "+statMap.get(PASS)+" > Miss:: "+statMap.get(FAIL)+" > Rate:: "+successRate+"% " );
+				// Success rate differs for every level base on the configuration
+				if(successRate>=Integer.parseInt(resourceBundle.getString("level.url."+k+".criteria"))) {
 					skitlogger.info("Shakedown Status :: SUCCESS");
 				}else {
 					skitlogger.info("Shakedown Status :: FAILURE");
 				}
-				skitlogger.info("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
 			});
 		}		
 	}
 	
+	/**
+	 * Shows progress based on the URL hits
+	 * @param appName
+	 */
+	private void showProgress(String appName){				
+		switch (progressMap.get(appName+CURRENT)*1000/progressMap.get(appName+ALL)) {
+			case 100:
+	        	skitlogger.info("10% Completed");
+	            break;    
+			case 200:
+	        	skitlogger.info("20% Completed");
+	            break;
+	        case 400:
+	        	skitlogger.info("40% Completed");
+	            break;
+	        case 600:
+	        	skitlogger.info("60% Completed");
+	            break;
+	        case 800:
+	        	skitlogger.info("80% Completed");
+	            break;
+	        case 950:
+	        	skitlogger.info("95% Completed");
+	        	skitlogger.info("Collecting Statistics...");
+	            break;
+	        default:	
+	        	skitlogger.debug("progressMap "+progressMap);
+	            break;
+	    }			
+	}
 	
+	/**
+	 * Searches the key in the resource bundle and returns the value
+	 * @param searchKeyStr
+	 * @return String
+	 */
+	private static Map<String,String> getResourceBundleValues(String searchKeyStr) {
+		Map<String,String> rsrcKeyMap = new HashMap<>();
+		Enumeration<String> rsrceKeyEnum = resourceBundle.getKeys();		
+		while (rsrceKeyEnum.hasMoreElements()) {
+		    String resrceKey = rsrceKeyEnum.nextElement();
+		    if(resrceKey.indexOf(searchKeyStr)>-1) {
+		    	rsrcKeyMap.put(resrceKey, resourceBundle.getString(resrceKey));
+		    }
+		}
+		return rsrcKeyMap;
+	}
 }

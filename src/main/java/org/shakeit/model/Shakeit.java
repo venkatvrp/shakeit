@@ -8,8 +8,6 @@ public class Shakeit
 {
 
     private Servers servers;
-
-
     private Applications applications;
 
     public Servers getServers ()

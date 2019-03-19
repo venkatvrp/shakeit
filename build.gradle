@@ -18,6 +18,7 @@ dependencies {
     compile 'org.apache.httpcomponents:httpclient:4.5.1'
     compile 'org.apache.logging.log4j:log4j-api:2.5'
     compile 'org.apache.logging.log4j:log4j-core:2.5'
+    compile 'org.jsoup:jsoup:1.8.3'
 }
 
 sourceSets {
@@ -38,5 +39,23 @@ jar{
     	configurations.compile.collect { 
     		it.isDirectory() ? it : zipTree(it) 
     	} 
-    }  
+    }     
+}
+
+task copyArtifacts(type: Copy) {
+
+	copy{
+	  from '/config/shakedown.bat'
+	  into '/build/shakeit/'
+	}
+	
+	copy{
+	  from '/build/libs/shakeit-1.0.jar'
+	  into '/build/shakeit/'
+	}
+	
+	copy{
+	  from '/config/shakeit-shakedown.xml'
+	  into '/build/shakeit/config/'
+	}
 }
