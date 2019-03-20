@@ -222,8 +222,13 @@ public class ShakeItEngine {
 		
 		for(Url appUrl:urlList){
 			if(appUrl.getApplication().equalsIgnoreCase(appName)) {
-				// To calculate and display progress
-				showProgress(appName);
+				
+				// Trigger progress only every alternate URL hit to avoid duplicate percentage display
+				if(progressMap.get(appName+CURRENT)%3==1) {
+					// To calculate and display progress
+					showProgress(appName);
+				}
+				
 				for(Url serverUrl:server.getUrl()) {				
 					if(serverUrl.getType().equalsIgnoreCase(appUrl.getType())) {
 						try {
@@ -344,24 +349,24 @@ public class ShakeItEngine {
 	 * Shows progress based on the URL hits
 	 * @param appName
 	 */
-	private void showProgress(String appName){				
-		switch (progressMap.get(appName+CURRENT)*1000/progressMap.get(appName+ALL)) {
-			case 100:
+	private void showProgress(String appName){		
+		switch (progressMap.get(appName+CURRENT)*100/progressMap.get(appName+ALL)) {
+			case 10:
 	        	skitlogger.info("10% Completed");
 	            break;    
-			case 200:
+			case 20:
 	        	skitlogger.info("20% Completed");
 	            break;
-	        case 400:
+	        case 40:
 	        	skitlogger.info("40% Completed");
 	            break;
-	        case 600:
+	        case 60:
 	        	skitlogger.info("60% Completed");
 	            break;
-	        case 800:
+	        case 80:
 	        	skitlogger.info("80% Completed");
 	            break;
-	        case 950:
+	        case 95:
 	        	skitlogger.info("95% Completed");
 	        	skitlogger.info("Collecting Statistics...");
 	            break;
