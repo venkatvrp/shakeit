@@ -8,11 +8,13 @@ import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
 import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.ResourceBundle;
 import java.util.Set;
@@ -37,7 +39,7 @@ import org.xml.sax.SAXException;
 
 public class ShakeItEngine {
 
-	static final ResourceBundle resourceBundle = ResourceBundle.getBundle("shakeit");	
+	static ResourceBundle resourceBundle = null;
 	static final Logger skitlogger = LogManager.getLogger(ShakeItEngine.class);
 	static final String TOTAL = "total";
 	static final String PASS = "pass";
@@ -55,6 +57,16 @@ public class ShakeItEngine {
 	int progressInt = 0;
 
 	public static void main(String[] args) {
+		
+		try {
+			File file = new File(System.getProperty("user.dir")+"/config");
+			URL[] urls= {file.toURI().toURL()};		
+			ClassLoader loader = new URLClassLoader(urls);
+			resourceBundle = ResourceBundle.getBundle("shakeit",Locale.getDefault(), loader);	
+		}catch(Exception e){
+			skitlogger.error("Error occurred while loading the properties file.");
+		}
+		
 		ShakeItEngine shakeItEng = new ShakeItEngine();
 		levelMap = new HashMap<>();
 		progressMap = new HashMap<>(); 

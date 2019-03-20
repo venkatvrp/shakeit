@@ -58,4 +58,9 @@ task copyArtifacts(type: Copy) {
 	  from '/config/shakeit-shakedown.xml'
 	  into '/build/shakeit/config/'
 	}
+	
+	copy{
+	  from '/config/shakeit.properties'
+	  into '/build/shakeit/config/'
+	}
 }
