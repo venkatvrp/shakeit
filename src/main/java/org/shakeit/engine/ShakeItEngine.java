@@ -16,6 +16,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 import java.util.Set;
 
@@ -79,6 +80,19 @@ public class ShakeItEngine {
 		getResourceBundleValues("error.").forEach((rsrcKey,rsrcVal)->errSetMap.put(rsrcKey,new HashSet<>()));
 		getResourceBundleValues("app.").forEach((rsrcKey,rsrcVal)->appListMap.put(rsrcVal,new ArrayList<Url>()));
 		
+		// Get the scan level
+		int scanLvl = 100;
+		try{
+			if(!resourceBundle.getString("scan.level").isEmpty()){
+				scanLvl = Integer.parseInt(resourceBundle.getString("scan.level"));
+				skitlogger.info("Level "+scanLvl+" and below application URLs will be scanned");
+			}else{
+				skitlogger.info("Default scan level applied. All URLs will be scanned");
+			}
+		}catch(MissingResourceException mre) {
+			skitlogger.info("Default scan level applied. All URLs will be scanned");
+		}
+		
 		if (args != null && args[0].length() > 0) {
 			String envIp = args[0];
 			String appName = args[1];
@@ -88,7 +102,7 @@ public class ShakeItEngine {
 			if (doc != null) {
 				skitlogger.info("XML is valid.");
 				if(!envIp.isEmpty()) {
-					shakeItEng.extractValuesfromXML(envIp,appName);
+					shakeItEng.extractValuesfromXML(envIp,appName,scanLvl);
 				}else {
 					skitlogger.error("Please specify shakedown environment (DEV/STG/PROD)");
 				}
@@ -160,7 +174,7 @@ public class ShakeItEngine {
 	 * @param envIp
 	 * @return boolean
 	 */
-	private boolean extractValuesfromXML(String envIp,String appName) {
+	private boolean extractValuesfromXML(String envIp,String appName,int scanLvl) {
 		File file = new File(System.getProperty("user.dir")+"/config/"+resourceBundle.getString("shakedown.xml.path"));
 		skitlogger.info("Shakedown being performed on "+envIp.toUpperCase()+ " environment");
 		JAXBContext jaxbContext = null;
@@ -180,7 +194,11 @@ public class ShakeItEngine {
 			Shakeit shakeit = (Shakeit) unmarshaller.unmarshal(file);
 			
 			// Stores URL specific to applications in the respective object in map
-			shakeit.getApplications().getUrl().forEach(url->appListMap.get(url.getApplication()).add(url));
+			shakeit.getApplications().getUrl().forEach(url->{
+				if(Integer.parseInt(url.getLevel())<=scanLvl){
+					appListMap.get(url.getApplication()).add(url);
+				}
+			});
 			
 			// Counts the number of Server for the specified application 
 			shakeit.getServers().getServer().forEach(server->{
